@@ -32,7 +32,12 @@ class Mitake extends BaseSms
     {
         $data = $this->prepare();
 
-        $response = $this->client->post($this->url, $data);
+        $response = $this->client->post($this->url, [
+            'headers' => [
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ],
+            'form_params' => $data,
+        ]);
 
         if ($response->getStatusCode() != 200) {
             throw new InvalidSms('Mitake service failed');
