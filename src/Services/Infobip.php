@@ -1,4 +1,5 @@
 <?php
+
 namespace Jarvisho\TaiwanSmsLaravel\Services;
 
 use GuzzleHttp\Client;
@@ -16,16 +17,28 @@ class Infobip extends BaseSms
     public const REJECTED = 5;
     protected $api;
 
-    public function __construct()
+    public function __construct($oversea = false)
     {
-        if(empty(config('taiwan_sms.services.infobip.url'))) throw new InvalidSms('infobip need url');
-        if(empty(config('taiwan_sms.services.infobip.username'))) throw new InvalidSms('infobip need username');
-        if(empty(config('taiwan_sms.services.infobip.password'))) throw new InvalidSms('infobip need password');
+        $this->oversea = $oversea;
 
-        $configuration = (new Configuration())
-            ->setHost(config('taiwan_sms.services.infobip.url'))
-            ->setUsername(config('taiwan_sms.services.infobip.username'))
-            ->setPassword(config('taiwan_sms.services.infobip.password'));
+        if (!$oversea) {
+            if (empty(config('taiwan_sms.services.infobip.url'))) throw new InvalidSms('infobip need url');
+            if (empty(config('taiwan_sms.services.infobip.username'))) throw new InvalidSms('infobip need username');
+            if (empty(config('taiwan_sms.services.infobip.password'))) throw new InvalidSms('infobip need password');
+
+            $configuration = (new Configuration())
+                ->setHost(config('taiwan_sms.services.infobip.url'))
+                ->setUsername(config('taiwan_sms.services.infobip.username'))
+                ->setPassword(config('taiwan_sms.services.infobip.password'));
+        } else {
+            if (empty(config('taiwan_sms.services.infobip.url'))) throw new InvalidSms('infobip need url');
+            if (empty(config('taiwan_sms.services.infobip.api_key'))) throw new InvalidSms('infobip need api_key');
+            if (empty(config('taiwan_sms.services.infobip.oversea_phone'))) throw new InvalidSms('infobip need oversea_phone');
+
+            $configuration = (new Configuration())
+                ->setHost(config('taiwan_sms.services.infobip.url'))
+                ->setApiKey('Authorization', 'App ' . config('taiwan_sms.services.infobip.api_key'));
+        }
 
         $client = new Client([
             'timeout' => config('taiwan_sms.timeout', 5),
@@ -51,14 +64,6 @@ class Infobip extends BaseSms
     }
 
     /**
-     * @return bool
-     */
-    public function isTaiwanPhoneNumber(): bool
-    {
-        return strlen($this->destination) == 10 && substr($this->destination, 0, -8) == '09';
-    }
-
-    /**
      * @return SmsAdvancedTextualRequest
      * @throws InvalidSms
      */
@@ -66,11 +71,14 @@ class Infobip extends BaseSms
     {
         if (empty($this->destination)) throw new InvalidSms('The empty destination is invalid.');
         if (empty($this->text)) throw new InvalidSms('The empty text is invalid.');
-        if ($this->isTaiwanPhoneNumber()) $this->destination = '886' . substr($this->destination, 1, 9);
+
+        $from = $this->oversea
+            ? config('taiwan_sms.services.infobip.oversea_phone')
+            : $this->subject;
 
         $destination = (new SmsDestination())->setTo($this->destination);
         $message = (new SmsTextualMessage())
-            ->setFrom($this->subject)
+            ->setFrom($from)
             ->setText($this->text)
             ->setDestinations([$destination]);
         return (new SmsAdvancedTextualRequest())

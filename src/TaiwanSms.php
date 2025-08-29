@@ -7,10 +7,14 @@ class TaiwanSms
 {
     public static function send($destination, $text, $test = false)
     {
+        $isTaiwanPhone = self::validateTaiwanPhone($destination);
+
         try {
-            $response = self::process(self::getPrimaryClassName(), $text, $destination, $test);
+            $response = $isTaiwanPhone
+                ? self::process(self::getPrimaryClassName(), $text, $destination, $isTaiwanPhone, $test)
+                : self::process(self::getClassPrefix() . ucfirst('infobip'), $text, $destination, $isTaiwanPhone, $test);
         }catch (\Exception $exception) {
-            if(empty(self::getFailoverClassName())) throw new InvalidSms($exception->getMessage());
+            if(empty(self::getFailoverClassName()) || !$isTaiwanPhone) throw new InvalidSms($exception->getMessage());
             try {
                 $response = self::process(self::getFailoverClassName(), $text, $destination, $test);
             }catch (\Exception $exception) {
@@ -27,9 +31,12 @@ class TaiwanSms
      * @param $destination
      * @return array
      */
-    public static function process(string $class, $text, $destination, $test = false): array
+    public static function process(string $class, $text, $destination, $isTaiwanPhone, $test = false): array
     {
-        $api = new $class();
+        $api = $isTaiwanPhone
+            ? new $class()
+            : new $class(true);
+
         $api->setText($text);
         $api->setDestination($destination);
         if($test) return $api->test();
@@ -67,5 +74,39 @@ class TaiwanSms
         $class .= '\\Services\\';
 
         return $class;
+    }
+
+    /**
+     * 驗證是否為台灣手機號碼格式
+     * @param string $phone
+     * @return bool
+     */
+    public static function validateTaiwanPhone(string $phone): bool
+    {
+        // 移除所有非數字字符
+        $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+
+        // 台灣手機號碼格式驗證
+        // 09開頭的10位數字 (例：0912345678)
+        // 或 +886開頭後接9開頭的9位數字 (例：+886912345678)
+        // 或 886開頭後接9開頭的9位數字 (例：886912345678)
+
+        if (preg_match('/^09\d{8}$/', $cleanPhone)) {
+            return true; // 09xxxxxxxx 格式
+        }
+
+        if (preg_match('/^8869\d{8}$/', $cleanPhone)) {
+            return true; // 8869xxxxxxxx 格式 (去掉+886前綴)
+        }
+
+        // 處理包含+886前綴的情況
+        if (str_starts_with($phone, '+886')) {
+            $phoneWithoutCountryCode = substr($cleanPhone, 3); // 移除886
+            if (preg_match('/^9\d{8}$/', $phoneWithoutCountryCode)) {
+                return true; // +8869xxxxxxxx 格式
+            }
+        }
+
+        return false;
     }
 }
